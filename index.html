@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Диск</title><style>body{font:17px/1.4 system-ui,sans-serif;margin:24px;color:#101828}</style></head>
+<body><p>Открываю карточку диска…</p>
+<script>
+// QR на этикетке: https://…/?000123 → карточка проверки в Google Таблице (DiskCheck Station)
+var n = (location.search || location.hash).replace(/^[?#]/, "");
+try { n = decodeURIComponent(n); } catch (e) { n = ""; }
+n = (n.match(/^[Фф]?[0-9]{1,6}/) || [""])[0];      // только номер проверки, всё остальное отбрасывается
+location.replace('https://script.google.com/macros/s/AKfycbx2PuJNsSFv6XUG1zsoxZO0WjI_Euca7bU2L79DJxJfAZGs0G-rq93VcGhddReNzL6Q/exec' + (n ? "?r=" + encodeURIComponent(n) : ""));
+</script>
+<noscript><a href='https://script.google.com/macros/s/AKfycbx2PuJNsSFv6XUG1zsoxZO0WjI_Euca7bU2L79DJxJfAZGs0G-rq93VcGhddReNzL6Q/exec'>Проверки дисков</a></noscript>
+</body></html>
