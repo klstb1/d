@@ -1,50 +1,108 @@
 <!doctype html>
 <html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Диск</title><style>body{margin:0;font:16px/1.4 sans-serif}main{max-width:640px;margin:0 auto;padding:10px}
+<link rel="preconnect" href="https://script.google.com" crossorigin><link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
+<link rel="dns-prefetch" href="https://script.googleusercontent.com">
+<title>Проверки дисков</title><style>body{margin:0;font:16px/1.4 sans-serif}main{max-width:640px;margin:0 auto;padding:10px}
 h1{font-size:19px;margin:4px 0 8px}table{width:100%;border-collapse:collapse;margin:6px 0 12px}
 td,th{padding:6px 4px;border-bottom:1px solid #ddd;text-align:left;vertical-align:top}
-th{width:45%;font-weight:normal;color:#666}.w{font-weight:bold}</style></head>
-<body><main><h1 id="t">Загрузка…</h1><div id="c"></div></main>
+th{width:45%;font-weight:normal;color:#666}.w{font-weight:bold}.m{color:#666;font-size:14px}
+input{width:62%;padding:7px;font:inherit}button{padding:7px 10px;font:inherit}
+nav{display:flex;justify-content:space-between;gap:8px;margin:8px 0 16px}nav a{padding:6px 0}</style></head>
+<body><main><p id="top"></p><h1 id="t">Загрузка…</h1><div id="c"></div><p id="bot" class="m"></p></main>
 <script>
-// QR на этикетке: https://…/?000123 → данные проверки из Google Таблицы (JSON) и простая таблица.
-// Страница открывается сразу; не ответил Google за 12 с — открыть обычную карточку Google.
+// Страница для QR и для просмотра проверок. Данные в Google Таблице, страница берёт их как JSON:
+//   ?000123          карточка проверки (так в QR на этикетке)
+//   ?000123&s=ИМЯ    карточка, если номер есть у нескольких станций
+//   (пусто), ?q=…&p=2 список проверок: новые сверху, по 20, поиск по номеру, модели, S/N, станции
+// Открытое недавно показывается сразу из памяти вкладки и обновляется, когда ответит Google.
+// Google не ответил за 12 с: открыть ту же страницу у самого Google.
 var APP = "https://script.google.com/macros/s/AKfycbx2PuJNsSFv6XUG1zsoxZO0WjI_Euca7bU2L79DJxJfAZGs0G-rq93VcGhddReNzL6Q/exec";
-var n = (location.search || location.hash).replace(/^[?#]/, "");
-try { n = decodeURIComponent(n); } catch (e) { n = ""; }
-n = (n.match(/^[Фф]?[0-9]{1,6}/) || [""])[0];
-var F = [["state","Состояние"],["use","Назначение"],["action","Что делать"],["why","Почему"],
+var S = (location.search || location.hash).replace(/^[?#]/, "");
+function dec(v) { try { return decodeURIComponent(v.replace(/\+/g, " ")); } catch (e) { return ""; } }
+function arg(name) { var m = S.match(new RegExp("(?:^|&)" + name + "=([^&]*)")); return m ? dec(m[1]) : ""; }
+var first = S.split("&")[0];
+var n = first.indexOf("=") < 0 ? (dec(first).match(/^[Фф]?[0-9]{1,6}/) || [""])[0] : "";
+var s = arg("s").slice(0, 64), q = arg("q").trim().slice(0, 64), pg = parseInt(arg("p"), 10) || 1;
+var c = document.getElementById("c"), t = document.getElementById("t");
+var hd = document.getElementById("top"), bot = document.getElementById("bot");
+
+function el(tag, text, cls) { var e = document.createElement(tag); if (text) e.textContent = text;
+  if (cls) e.className = cls; return e; }
+function a(href, text) { var e = el("a", text); e.href = href; return e; }
+function card(key, st) { return "?" + encodeURIComponent(key) + (st ? "&s=" + encodeURIComponent(st) : ""); }
+function list(qq, p) { var x = []; if (qq) x.push("q=" + encodeURIComponent(qq)); if (p > 1) x.push("p=" + p);
+  return x.length ? "?" + x.join("&") : "./"; }
+function table(rows) { var tb = el("table"); rows.forEach(function (r) { var tr = el("tr");
+  tr.appendChild(el("th", r[0])); tr.appendChild(el("td", r[1])); tb.appendChild(tr); }); return tb; }
+function clear() { c.textContent = ""; hd.textContent = ""; bot.textContent = ""; }
+
+function load(params, render, google) {
+  var key = "dc|" + params, shown = false;
+  try { var old = sessionStorage.getItem(key); if (old) { render(JSON.parse(old)); shown = true; } } catch (e) {}
+  var timer = setTimeout(function () { if (!shown) location.replace(google); }, 12000);
+  fetch(APP + "?json=1&" + params).then(function (r) { return r.json(); }).then(function (d) {
+    clearTimeout(timer);
+    var txt = JSON.stringify(d);
+    try { if (sessionStorage.getItem(key) === txt) return; sessionStorage.setItem(key, txt); } catch (e) {}
+    render(d);
+  }).catch(function () { clearTimeout(timer); if (!shown) location.replace(google); });
+}
+
+var F = [["state","Состояние"],["use","Назначение"],["action","Что делать"],["why","Почему"],["notes","Замечания"],
   ["vendor","Производитель"],["model","Модель"],["serial","Серийный номер"],["capacity","Объём"],
   ["drive_type","Тип"],["class","Класс"],["interface","Интерфейс"],["firmware","Прошивка"],
   ["hours","Наработка, ч"],["written","Записано"],["read","Прочитано"],["defects","Дефекты"],
   ["reallocated","Переназначено секторов"],["pending","Нестабильные секторы"],["uncorrect","Ошибки чтения (SMART)"],
   ["surface_errors","Ошибки поверхности"],["surface_pct","Прочитано поверхности, %"],["temperature","Температура, °C"],
-  ["wear","Износ, %"],["depth","Глубина проверки"],["station","Станция"],["checked_at","Дата проверки"]];
-var c = document.getElementById("c"), t = document.getElementById("t");
-function el(tag, text, cls) { var e = document.createElement(tag); if (text) e.textContent = text;
-  if (cls) e.className = cls; return e; }
-function table(rows) { var tb = el("table"); rows.forEach(function (r) { var tr = el("tr");
-  tr.appendChild(el("th", r[0])); tr.appendChild(el("td", r[1])); tb.appendChild(tr); }); return tb; }
-function link(key, text) { var a = el("a", text); a.href = "?" + key; return a; }
-function full() { location.replace(APP + (n ? "?r=" + encodeURIComponent(n) : "")); }
-if (!n) full();
-var timer = setTimeout(full, 12000);
-fetch(APP + "?json=1&r=" + encodeURIComponent(n)).then(function (r) { return r.json(); }).then(function (d) {
-  clearTimeout(timer);
-  if (d.choose) { full(); return; }
+  ["wear","Износ, %"],["speed","Скорость чтения"],["selftest","Самотест"],["depth","Глубина проверки"],["station","Станция"],["checked_at","Дата проверки"]];
+
+function showCard(d) {
+  clear(); hd.appendChild(a("./", "← Все проверки и поиск"));
+  bot.appendChild(a(APP + "?r=" + encodeURIComponent(n) + (s ? "&s=" + encodeURIComponent(s) : ""), "Эта проверка в Google"));
+  if (d.choose) { t.textContent = "Проверка " + n + " есть на нескольких станциях"; var tc = el("table");
+    d.choose.forEach(function (x) { var tr = el("tr"), td = el("td"); td.appendChild(a(card(x.key, x.station), x.station));
+      tr.appendChild(td); tr.appendChild(el("td", x.model + " S/N " + x.serial)); tr.appendChild(el("td", x.state));
+      tc.appendChild(tr); }); c.appendChild(tc); return; }
   if (d.missing) { t.textContent = "Проверка " + n + " ещё не выгружена";
     c.appendChild(el("p", "Станция отправит её, когда появится сеть. Решение напечатано на этикетке.")); return; }
-  var v = d.row; t.textContent = "Проверка " + v.key + ": " + v.state;
+  var v = d.row; t.textContent = "Проверка " + v.key + ": " + v.state; document.title = "Диск " + v.key;
   if (d.edited) c.appendChild(el("p", "Внимание: данные изменены после проверки. Не доверять, обратиться в Help Desk.", "w"));
-  if (d.newer) { var p = el("p", "Есть более новая проверка этого диска: ", "w"); p.appendChild(link(d.newer.key, d.newer.key));
+  if (d.newer) { var p = el("p", "Есть более новая проверка этого диска: ", "w");
+    p.appendChild(a(card(d.newer.key, d.newer.station), d.newer.key));
     p.appendChild(document.createTextNode(" от " + d.newer.checked_at.slice(0, 10) + " (" + d.newer.state + "). Этикетку заменить."));
     c.appendChild(p); }
   c.appendChild(table(F.filter(function (f) { return v[f[0]]; }).map(function (f) { return [f[1], v[f[0]]]; })));
   if (d.stock) { c.appendChild(el("b", "Склад")); c.appendChild(table(d.stock)); }
   if (d.others && d.others.length) { c.appendChild(el("b", "Другие проверки этого диска")); var tb = el("table");
-    d.others.forEach(function (x) { var tr = el("tr"), td = el("td"); td.appendChild(link(x.key, x.key)); tr.appendChild(td);
-      tr.appendChild(el("td", x.checked_at.slice(0, 10))); tr.appendChild(el("td", x.state + " " + x.use)); tb.appendChild(tr); });
-    c.appendChild(tb); }
-}).catch(function () { full(); });
+    d.others.forEach(function (x) { var tr = el("tr"), td = el("td"); td.appendChild(a(card(x.key, x.station), x.key));
+      tr.appendChild(td); tr.appendChild(el("td", x.checked_at.slice(0, 10))); tr.appendChild(el("td", x.state + " " + x.use));
+      tb.appendChild(tr); }); c.appendChild(tb); }
+}
+
+function showList(d) {
+  clear(); document.title = "Проверки дисков";
+  t.textContent = d.q ? "Поиск: " + d.q : "Проверки дисков";
+  var f = el("form"), i = el("input"); i.name = "q"; i.value = d.q; i.placeholder = "Номер, модель или серийный номер";
+  f.appendChild(i); f.appendChild(document.createTextNode(" ")); f.appendChild(el("button", "Найти")); c.appendChild(f);
+  if (d.q) c.appendChild(el("p")).appendChild(a("./", "← Все проверки"));
+  if (!d.rows.length) { c.appendChild(el("p", "Ничего не найдено.")); return; }
+  var tb = el("table");
+  d.rows.forEach(function (x) { var tr = el("tr"), k = el("td"), m = el("td", x.model);
+    k.appendChild(a(card(x.key, x.station), x.key)); k.appendChild(el("div", x.station, "m"));
+    m.appendChild(el("div", "S/N " + x.serial, "m")); tr.appendChild(k); tr.appendChild(el("td", x.state + " " + x.use));
+    tr.appendChild(m); tr.appendChild(el("td", x.checked_at)); tb.appendChild(tr); });
+  c.appendChild(tb);
+  var nav = el("nav");
+  nav.appendChild(d.page > 1 ? a(list(d.q, d.page - 1), "← Новее") : el("span"));
+  nav.appendChild(el("span", "стр. " + d.page + " из " + d.pages + " · всего " + d.total, "m"));
+  nav.appendChild(d.page < d.pages ? a(list(d.q, d.page + 1), "Старее →") : el("span"));
+  c.appendChild(nav);
+}
+
+if (n) load("r=" + encodeURIComponent(n) + (s ? "&s=" + encodeURIComponent(s) : ""), showCard,
+            APP + "?r=" + encodeURIComponent(n) + (s ? "&s=" + encodeURIComponent(s) : ""));
+else load("list=1&q=" + encodeURIComponent(q) + "&p=" + pg, showList,
+          APP + (q || pg > 1 ? "?q=" + encodeURIComponent(q) + "&p=" + pg : ""));
 </script>
 <noscript><a href="https://script.google.com/macros/s/AKfycbx2PuJNsSFv6XUG1zsoxZO0WjI_Euca7bU2L79DJxJfAZGs0G-rq93VcGhddReNzL6Q/exec">Проверки дисков</a></noscript>
 </body></html>
